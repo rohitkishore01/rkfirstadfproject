@@ -1,0 +1,30 @@
+{
+	"$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+	"contentVersion": "1.0.0.0",
+	"parameters": {
+		"factoryName": {
+			"value": "adffirstazureproject"
+		},
+		"ls_adls_bronze_accountKey": {
+			"value": ""
+		},
+		"ls_blob_raw_connectionString": {
+			"value": ""
+		},
+		"ls_sqlserver_local_password": {
+			"value": ""
+		},
+		"ls_adls_bronze_properties_typeProperties_url": {
+			"value": "https://adlsgfirstazureproject.dfs.core.windows.net/"
+		},
+		"ls_sqlserver_local_properties_typeProperties_server": {
+			"value": "DESKTOP-1J15KOS"
+		},
+		"ls_sqlserver_local_properties_typeProperties_database": {
+			"value": "ADF_Log"
+		},
+		"ls_sqlserver_local_properties_typeProperties_userName": {
+			"value": "localdbuser"
+		}
+	}
+}

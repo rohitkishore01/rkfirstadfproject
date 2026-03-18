@@ -1,0 +1,1056 @@
+{
+	"$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+	"contentVersion": "1.0.0.0",
+	"parameters": {
+		"factoryName": {
+			"type": "string",
+			"metadata": "Data Factory name",
+			"defaultValue": "adffirstazureproject"
+		},
+		"ls_adls_bronze_accountKey": {
+			"type": "secureString",
+			"metadata": "Secure string for 'accountKey' of 'ls_adls_bronze'"
+		},
+		"ls_blob_raw_connectionString": {
+			"type": "secureString",
+			"metadata": "Secure string for 'connectionString' of 'ls_blob_raw'"
+		},
+		"ls_sqlserver_local_password": {
+			"type": "secureString",
+			"metadata": "Secure string for 'password' of 'ls_sqlserver_local'"
+		},
+		"ls_adls_bronze_properties_typeProperties_url": {
+			"type": "string",
+			"defaultValue": "https://adlsgfirstazureproject.dfs.core.windows.net/"
+		},
+		"ls_sqlserver_local_properties_typeProperties_server": {
+			"type": "string",
+			"defaultValue": "DESKTOP-1J15KOS"
+		},
+		"ls_sqlserver_local_properties_typeProperties_database": {
+			"type": "string",
+			"defaultValue": "ADF_Log"
+		},
+		"ls_sqlserver_local_properties_typeProperties_userName": {
+			"type": "string",
+			"defaultValue": "localdbuser"
+		}
+	},
+	"variables": {
+		"factoryId": "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'))]"
+	},
+	"resources": [
+		{
+			"name": "[concat(parameters('factoryName'), '/pl_smart_file_migration')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "LookupConfig",
+						"type": "Lookup",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "SqlServerSource",
+								"sqlReaderQuery": "SELECT file_type, is_active, target_folder\nFROM pipeline_config\nWHERE is_active = 1",
+								"queryTimeout": "02:00:00",
+								"isolationLevel": "ReadUncommitted",
+								"partitionOption": "None"
+							},
+							"dataset": {
+								"referenceName": "ds_sqlserver_config",
+								"type": "DatasetReference",
+								"parameters": {}
+							},
+							"firstRowOnly": false
+						}
+					},
+					{
+						"name": "GetMetadata_Folder",
+						"type": "GetMetadata",
+						"dependsOn": [
+							{
+								"activity": "LookupConfig",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"dataset": {
+								"referenceName": "ds_blob_folder",
+								"type": "DatasetReference",
+								"parameters": {}
+							},
+							"fieldList": [
+								"childItems"
+							],
+							"storeSettings": {
+								"type": "AzureBlobStorageReadSettings",
+								"recursive": true,
+								"enablePartitionDiscovery": false
+							},
+							"formatSettings": {
+								"type": "BinaryReadSettings"
+							}
+						}
+					},
+					{
+						"name": "ForEachFile",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "GetMetadata_Folder",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('GetMetadata_Folder').output.childItems",
+								"type": "Expression"
+							},
+							"isSequential": true,
+							"activities": [
+								{
+									"name": "current file type",
+									"type": "SetVariable",
+									"dependsOn": [
+										{
+											"activity": "current full file name",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"variableName": "currentfiletype",
+										"value": {
+											"value": "@last(split(item().name, '.'))",
+											"type": "Expression"
+										}
+									}
+								},
+								{
+									"name": "Switch",
+									"type": "Switch",
+									"dependsOn": [
+										{
+											"activity": "current file type",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"userProperties": [],
+									"typeProperties": {
+										"on": {
+											"value": "@variables('currentfiletype')",
+											"type": "Expression"
+										},
+										"cases": [
+											{
+												"value": "xlsx",
+												"activities": [
+													{
+														"name": "Copy data excel",
+														"type": "Copy",
+														"dependsOn": [
+															{
+																"activity": "Get Metadata excel",
+																"dependencyConditions": [
+																	"Succeeded"
+																]
+															}
+														],
+														"policy": {
+															"timeout": "0.12:00:00",
+															"retry": 0,
+															"retryIntervalInSeconds": 30,
+															"secureOutput": false,
+															"secureInput": false
+														},
+														"userProperties": [],
+														"typeProperties": {
+															"source": {
+																"type": "ExcelSource",
+																"storeSettings": {
+																	"type": "AzureBlobStorageReadSettings",
+																	"recursive": true,
+																	"enablePartitionDiscovery": false
+																}
+															},
+															"sink": {
+																"type": "ParquetSink",
+																"storeSettings": {
+																	"type": "AzureBlobFSWriteSettings"
+																},
+																"formatSettings": {
+																	"type": "ParquetWriteSettings"
+																}
+															},
+															"enableStaging": false,
+															"translator": {
+																"type": "TabularTranslator",
+																"typeConversion": true,
+																"typeConversionSettings": {
+																	"allowDataTruncation": true,
+																	"treatBooleanAsNumber": false
+																}
+															}
+														},
+														"inputs": [
+															{
+																"referenceName": "ds_blob_excel",
+																"type": "DatasetReference",
+																"parameters": {
+																	"p_filename": {
+																		"value": "@variables('currentfullfilename')",
+																		"type": "Expression"
+																	}
+																}
+															}
+														],
+														"outputs": [
+															{
+																"referenceName": "ds_adls_excel",
+																"type": "DatasetReference",
+																"parameters": {
+																	"p_foldername": "excel",
+																	"p_excelname": {
+																		"value": "@concat(variables('currentfilename'),'.parquet')",
+																		"type": "Expression"
+																	}
+																}
+															}
+														]
+													},
+													{
+														"name": "Get Metadata excel",
+														"type": "GetMetadata",
+														"dependsOn": [],
+														"policy": {
+															"timeout": "0.12:00:00",
+															"retry": 0,
+															"retryIntervalInSeconds": 30,
+															"secureOutput": false,
+															"secureInput": false
+														},
+														"userProperties": [],
+														"typeProperties": {
+															"dataset": {
+																"referenceName": "ds_blob_excel",
+																"type": "DatasetReference",
+																"parameters": {
+																	"p_filename": {
+																		"value": "@variables('currentfullfilename')",
+																		"type": "Expression"
+																	}
+																}
+															},
+															"fieldList": [
+																"size"
+															],
+															"storeSettings": {
+																"type": "AzureBlobStorageReadSettings",
+																"recursive": true,
+																"enablePartitionDiscovery": false
+															}
+														}
+													},
+													{
+														"name": "excel sp",
+														"type": "SqlServerStoredProcedure",
+														"dependsOn": [
+															{
+																"activity": "Copy data excel",
+																"dependencyConditions": [
+																	"Succeeded"
+																]
+															}
+														],
+														"policy": {
+															"timeout": "0.12:00:00",
+															"retry": 0,
+															"retryIntervalInSeconds": 30,
+															"secureOutput": false,
+															"secureInput": false
+														},
+														"userProperties": [],
+														"typeProperties": {
+															"storedProcedureName": "[[dbo].[usp_LogMigration]",
+															"storedProcedureParameters": {
+																"FileName": {
+																	"value": {
+																		"value": "@variables('currentfullfilename')",
+																		"type": "Expression"
+																	},
+																	"type": "String"
+																},
+																"FileSizeKb": {
+																	"value": {
+																		"value": "@activity('Get Metadata excel').output.size",
+																		"type": "Expression"
+																	},
+																	"type": "Decimal"
+																},
+																"FileType": {
+																	"value": {
+																		"value": "@variables('currentfiletype')",
+																		"type": "Expression"
+																	},
+																	"type": "String"
+																},
+																"PipelineRunId": {
+																	"value": null,
+																	"type": "String"
+																},
+																"RowCount": {
+																	"value": null,
+																	"type": "Int32"
+																},
+																"Status": {
+																	"value": "Success",
+																	"type": "String"
+																}
+															}
+														},
+														"linkedServiceName": {
+															"referenceName": "ls_sqlserver_local",
+															"type": "LinkedServiceReference"
+														}
+													}
+												]
+											},
+											{
+												"value": "json",
+												"activities": [
+													{
+														"name": "Copy data json",
+														"type": "Copy",
+														"dependsOn": [
+															{
+																"activity": "Get Metadata json",
+																"dependencyConditions": [
+																	"Succeeded"
+																]
+															}
+														],
+														"policy": {
+															"timeout": "0.12:00:00",
+															"retry": 0,
+															"retryIntervalInSeconds": 30,
+															"secureOutput": false,
+															"secureInput": false
+														},
+														"userProperties": [],
+														"typeProperties": {
+															"source": {
+																"type": "JsonSource",
+																"storeSettings": {
+																	"type": "AzureBlobStorageReadSettings",
+																	"recursive": true,
+																	"enablePartitionDiscovery": false
+																},
+																"formatSettings": {
+																	"type": "JsonReadSettings"
+																}
+															},
+															"sink": {
+																"type": "ParquetSink",
+																"storeSettings": {
+																	"type": "AzureBlobFSWriteSettings"
+																},
+																"formatSettings": {
+																	"type": "ParquetWriteSettings"
+																}
+															},
+															"enableStaging": false
+														},
+														"inputs": [
+															{
+																"referenceName": "ds_blob_json",
+																"type": "DatasetReference",
+																"parameters": {
+																	"p_filename": {
+																		"value": "@variables('currentfullfilename')",
+																		"type": "Expression"
+																	}
+																}
+															}
+														],
+														"outputs": [
+															{
+																"referenceName": "ds_adls_json",
+																"type": "DatasetReference",
+																"parameters": {
+																	"p_foldername": "json",
+																	"p_jsonname": {
+																		"value": "@concat(variables('currentfilename'),'.parquet')",
+																		"type": "Expression"
+																	}
+																}
+															}
+														]
+													},
+													{
+														"name": "Get Metadata json",
+														"type": "GetMetadata",
+														"dependsOn": [],
+														"policy": {
+															"timeout": "0.12:00:00",
+															"retry": 0,
+															"retryIntervalInSeconds": 30,
+															"secureOutput": false,
+															"secureInput": false
+														},
+														"userProperties": [],
+														"typeProperties": {
+															"dataset": {
+																"referenceName": "ds_blob_json",
+																"type": "DatasetReference",
+																"parameters": {
+																	"p_filename": {
+																		"value": "@variables('currentfullfilename')",
+																		"type": "Expression"
+																	}
+																}
+															},
+															"fieldList": [
+																"size"
+															],
+															"storeSettings": {
+																"type": "AzureBlobStorageReadSettings",
+																"recursive": true,
+																"enablePartitionDiscovery": false
+															},
+															"formatSettings": {
+																"type": "JsonReadSettings"
+															}
+														}
+													},
+													{
+														"name": "json sp",
+														"type": "SqlServerStoredProcedure",
+														"dependsOn": [
+															{
+																"activity": "Copy data json",
+																"dependencyConditions": [
+																	"Succeeded"
+																]
+															}
+														],
+														"policy": {
+															"timeout": "0.12:00:00",
+															"retry": 0,
+															"retryIntervalInSeconds": 30,
+															"secureOutput": false,
+															"secureInput": false
+														},
+														"userProperties": [],
+														"typeProperties": {
+															"storedProcedureName": "[[dbo].[usp_LogMigration]",
+															"storedProcedureParameters": {
+																"FileName": {
+																	"value": {
+																		"value": "@variables('currentfullfilename')",
+																		"type": "Expression"
+																	},
+																	"type": "String"
+																},
+																"FileSizeKb": {
+																	"value": {
+																		"value": "@activity('Get Metadata json').output.size",
+																		"type": "Expression"
+																	},
+																	"type": "Decimal"
+																},
+																"FileType": {
+																	"value": {
+																		"value": "@variables('currentfiletype')",
+																		"type": "Expression"
+																	},
+																	"type": "String"
+																},
+																"PipelineRunId": {
+																	"value": null,
+																	"type": "String"
+																},
+																"RowCount": {
+																	"value": null,
+																	"type": "Int32"
+																},
+																"Status": {
+																	"value": "Success",
+																	"type": "String"
+																}
+															}
+														},
+														"linkedServiceName": {
+															"referenceName": "ls_sqlserver_local",
+															"type": "LinkedServiceReference"
+														}
+													}
+												]
+											}
+										],
+										"defaultActivities": [
+											{
+												"name": "Get Metadata other",
+												"type": "GetMetadata",
+												"dependsOn": [],
+												"policy": {
+													"timeout": "0.12:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"dataset": {
+														"referenceName": "ds_blob_other",
+														"type": "DatasetReference",
+														"parameters": {
+															"p_filename": {
+																"value": "@variables('currentfullfilename')",
+																"type": "Expression"
+															}
+														}
+													},
+													"fieldList": [
+														"size"
+													],
+													"storeSettings": {
+														"type": "AzureBlobStorageReadSettings",
+														"recursive": true,
+														"enablePartitionDiscovery": false
+													},
+													"formatSettings": {
+														"type": "BinaryReadSettings"
+													}
+												}
+											},
+											{
+												"name": "sp for updating other",
+												"type": "SqlServerStoredProcedure",
+												"dependsOn": [
+													{
+														"activity": "Get Metadata other",
+														"dependencyConditions": [
+															"Succeeded"
+														]
+													}
+												],
+												"policy": {
+													"timeout": "0.12:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"storedProcedureName": "[[dbo].[usp_LogMigration]",
+													"storedProcedureParameters": {
+														"FileName": {
+															"value": {
+																"value": "@variables('currentfullfilename')",
+																"type": "Expression"
+															},
+															"type": "String"
+														},
+														"FileSizeKb": {
+															"value": {
+																"value": "@activity('Get Metadata other').output.size",
+																"type": "Expression"
+															},
+															"type": "Decimal"
+														},
+														"FileType": {
+															"value": {
+																"value": "@variables('currentfiletype')",
+																"type": "Expression"
+															},
+															"type": "String"
+														},
+														"PipelineRunId": {
+															"value": null,
+															"type": "String"
+														},
+														"RowCount": {
+															"value": null,
+															"type": "Int32"
+														},
+														"Status": {
+															"value": "Ignored",
+															"type": "String"
+														}
+													}
+												},
+												"linkedServiceName": {
+													"referenceName": "ls_sqlserver_local",
+													"type": "LinkedServiceReference"
+												}
+											}
+										]
+									}
+								},
+								{
+									"name": "current full file name",
+									"description": "",
+									"type": "SetVariable",
+									"dependsOn": [
+										{
+											"activity": "current file name  without filetype",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"variableName": "currentfullfilename",
+										"value": {
+											"value": "@item().name",
+											"type": "Expression"
+										}
+									}
+								},
+								{
+									"name": "current file name  without filetype",
+									"description": "plain file name without filetype",
+									"type": "SetVariable",
+									"dependsOn": [],
+									"policy": {
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"variableName": "currentfilename",
+										"value": {
+											"value": "@first(split(item().name, '.'))",
+											"type": "Expression"
+										}
+									}
+								}
+							]
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"parameters": {
+					"var_status": {
+						"type": "string",
+						"defaultValue": "Failed"
+					},
+					"var_row_count": {
+						"type": "int",
+						"defaultValue": 0
+					},
+					"var_file_size_kb": {
+						"type": "float",
+						"defaultValue": 0
+					}
+				},
+				"variables": {
+					"currentfilename": {
+						"type": "String"
+					},
+					"filterresult": {
+						"type": "Boolean"
+					},
+					"filterresultarry": {
+						"type": "Array"
+					},
+					"filterbool": {
+						"type": "Boolean"
+					},
+					"currentfiletype": {
+						"type": "String"
+					},
+					"currentfullfilename": {
+						"type": "String"
+					}
+				},
+				"annotations": [],
+				"lastPublishTime": "2026-03-18T06:12:15Z"
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/datasets/ds_sqlserver_config')]",
+				"[concat(variables('factoryId'), '/datasets/ds_blob_folder')]",
+				"[concat(variables('factoryId'), '/datasets/ds_blob_other')]",
+				"[concat(variables('factoryId'), '/linkedServices/ls_sqlserver_local')]",
+				"[concat(variables('factoryId'), '/datasets/ds_blob_excel')]",
+				"[concat(variables('factoryId'), '/datasets/ds_adls_excel')]",
+				"[concat(variables('factoryId'), '/datasets/ds_blob_json')]",
+				"[concat(variables('factoryId'), '/datasets/ds_adls_json')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/ds_adls_excel')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "ls_adls_bronze",
+					"type": "LinkedServiceReference"
+				},
+				"parameters": {
+					"p_foldername": {
+						"type": "String",
+						"defaultValue": "excel"
+					},
+					"p_excelname": {
+						"type": "string",
+						"defaultValue": "DefaulExcelName"
+					}
+				},
+				"annotations": [],
+				"type": "Parquet",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"fileName": {
+							"value": "@dataset().p_excelname",
+							"type": "Expression"
+						},
+						"folderPath": {
+							"value": "@dataset().p_foldername",
+							"type": "Expression"
+						},
+						"fileSystem": "bronze"
+					},
+					"compressionCodec": "snappy"
+				},
+				"schema": []
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/ls_adls_bronze')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/ds_adls_json')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "ls_adls_bronze",
+					"type": "LinkedServiceReference"
+				},
+				"parameters": {
+					"p_foldername": {
+						"type": "String",
+						"defaultValue": "json"
+					},
+					"p_jsonname": {
+						"type": "string",
+						"defaultValue": "DefaultJsonName"
+					}
+				},
+				"annotations": [],
+				"type": "Parquet",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"fileName": {
+							"value": "@dataset().p_jsonname",
+							"type": "Expression"
+						},
+						"folderPath": {
+							"value": "@dataset().p_foldername",
+							"type": "Expression"
+						},
+						"fileSystem": "bronze"
+					},
+					"compressionCodec": "snappy"
+				},
+				"schema": []
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/ls_adls_bronze')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/ds_blob_excel')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "ls_blob_raw",
+					"type": "LinkedServiceReference"
+				},
+				"parameters": {
+					"p_filename": {
+						"type": "string",
+						"defaultValue": "DefaultExcelName"
+					}
+				},
+				"annotations": [],
+				"type": "Excel",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobStorageLocation",
+						"fileName": {
+							"value": "@dataset().p_filename",
+							"type": "Expression"
+						},
+						"container": "raw"
+					},
+					"sheetIndex": 0,
+					"firstRowAsHeader": true
+				},
+				"schema": []
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/ls_blob_raw')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/ds_blob_folder')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "ls_blob_raw",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "Binary",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobStorageLocation",
+						"container": "raw"
+					}
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/ls_blob_raw')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/ds_blob_json')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "ls_blob_raw",
+					"type": "LinkedServiceReference"
+				},
+				"parameters": {
+					"p_filename": {
+						"type": "String",
+						"defaultValue": "DefaultJsonName"
+					}
+				},
+				"annotations": [],
+				"type": "Json",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobStorageLocation",
+						"fileName": {
+							"value": "@dataset().p_filename",
+							"type": "Expression"
+						},
+						"container": "raw"
+					}
+				},
+				"schema": {}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/ls_blob_raw')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/ds_blob_other')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "ls_blob_raw",
+					"type": "LinkedServiceReference"
+				},
+				"parameters": {
+					"p_filename": {
+						"type": "String",
+						"defaultValue": "other"
+					}
+				},
+				"annotations": [],
+				"type": "Binary",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobStorageLocation",
+						"fileName": {
+							"value": "@dataset().p_filename",
+							"type": "Expression"
+						},
+						"container": "raw"
+					}
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/ls_blob_raw')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/ds_sqlserver_config')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "ls_sqlserver_local",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "SqlServerTable",
+				"schema": [
+					{
+						"name": "log_id",
+						"type": "int",
+						"precision": 10
+					},
+					{
+						"name": "file_name",
+						"type": "varchar"
+					},
+					{
+						"name": "file_type",
+						"type": "varchar"
+					},
+					{
+						"name": "file_size_kb",
+						"type": "decimal",
+						"precision": 10,
+						"scale": 2
+					},
+					{
+						"name": "row_count",
+						"type": "int",
+						"precision": 10
+					},
+					{
+						"name": "status",
+						"type": "varchar"
+					},
+					{
+						"name": "transferred_at",
+						"type": "datetime",
+						"precision": 23,
+						"scale": 3
+					},
+					{
+						"name": "pipeline_run_id",
+						"type": "varchar"
+					}
+				],
+				"typeProperties": {
+					"schema": "dbo",
+					"table": "pipeline_config"
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/ls_sqlserver_local')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/ls_adls_bronze')]",
+			"type": "Microsoft.DataFactory/factories/linkedServices",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"annotations": [],
+				"type": "AzureBlobFS",
+				"typeProperties": {
+					"url": "[parameters('ls_adls_bronze_properties_typeProperties_url')]",
+					"accountKey": {
+						"type": "SecureString",
+						"value": "[parameters('ls_adls_bronze_accountKey')]"
+					}
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/ls_blob_raw')]",
+			"type": "Microsoft.DataFactory/factories/linkedServices",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"annotations": [],
+				"type": "AzureBlobStorage",
+				"typeProperties": {
+					"connectionString": "[parameters('ls_blob_raw_connectionString')]"
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/ls_sqlserver_local')]",
+			"type": "Microsoft.DataFactory/factories/linkedServices",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"annotations": [],
+				"type": "SqlServer",
+				"typeProperties": {
+					"server": "[parameters('ls_sqlserver_local_properties_typeProperties_server')]",
+					"database": "[parameters('ls_sqlserver_local_properties_typeProperties_database')]",
+					"encrypt": "optional",
+					"trustServerCertificate": true,
+					"authenticationType": "SQL",
+					"userName": "[parameters('ls_sqlserver_local_properties_typeProperties_userName')]",
+					"password": {
+						"type": "SecureString",
+						"value": "[parameters('ls_sqlserver_local_password')]"
+					}
+				},
+				"connectVia": {
+					"referenceName": "LocalIntegration",
+					"type": "IntegrationRuntimeReference"
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/integrationRuntimes/LocalIntegration')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/LocalIntegration')]",
+			"type": "Microsoft.DataFactory/factories/integrationRuntimes",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"type": "SelfHosted",
+				"typeProperties": {}
+			},
+			"dependsOn": []
+		}
+	]
+}

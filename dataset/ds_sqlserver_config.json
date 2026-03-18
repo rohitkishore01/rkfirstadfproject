@@ -1,0 +1,56 @@
+{
+	"name": "ds_sqlserver_config",
+	"properties": {
+		"linkedServiceName": {
+			"referenceName": "ls_sqlserver_local",
+			"type": "LinkedServiceReference"
+		},
+		"annotations": [],
+		"type": "SqlServerTable",
+		"schema": [
+			{
+				"name": "log_id",
+				"type": "int",
+				"precision": 10
+			},
+			{
+				"name": "file_name",
+				"type": "varchar"
+			},
+			{
+				"name": "file_type",
+				"type": "varchar"
+			},
+			{
+				"name": "file_size_kb",
+				"type": "decimal",
+				"precision": 10,
+				"scale": 2
+			},
+			{
+				"name": "row_count",
+				"type": "int",
+				"precision": 10
+			},
+			{
+				"name": "status",
+				"type": "varchar"
+			},
+			{
+				"name": "transferred_at",
+				"type": "datetime",
+				"precision": 23,
+				"scale": 3
+			},
+			{
+				"name": "pipeline_run_id",
+				"type": "varchar"
+			}
+		],
+		"typeProperties": {
+			"schema": "dbo",
+			"table": "pipeline_config"
+		}
+	},
+	"type": "Microsoft.DataFactory/factories/datasets"
+}

@@ -1,0 +1,31 @@
+{
+	"name": "ds_blob_excel",
+	"properties": {
+		"linkedServiceName": {
+			"referenceName": "ls_blob_raw",
+			"type": "LinkedServiceReference"
+		},
+		"parameters": {
+			"p_filename": {
+				"type": "string",
+				"defaultValue": "DefaultExcelName"
+			}
+		},
+		"annotations": [],
+		"type": "Excel",
+		"typeProperties": {
+			"location": {
+				"type": "AzureBlobStorageLocation",
+				"fileName": {
+					"value": "@dataset().p_filename",
+					"type": "Expression"
+				},
+				"container": "raw"
+			},
+			"sheetIndex": 0,
+			"firstRowAsHeader": true
+		},
+		"schema": []
+	},
+	"type": "Microsoft.DataFactory/factories/datasets"
+}

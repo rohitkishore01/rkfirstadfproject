@@ -1,0 +1,662 @@
+{
+	"name": "pl_smart_file_migration",
+	"properties": {
+		"activities": [
+			{
+				"name": "LookupConfig",
+				"type": "Lookup",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "SqlServerSource",
+						"sqlReaderQuery": "SELECT file_type, is_active, target_folder\nFROM pipeline_config\nWHERE is_active = 1",
+						"queryTimeout": "02:00:00",
+						"isolationLevel": "ReadUncommitted",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "ds_sqlserver_config",
+						"type": "DatasetReference"
+					},
+					"firstRowOnly": false
+				}
+			},
+			{
+				"name": "GetMetadata_Folder",
+				"type": "GetMetadata",
+				"dependsOn": [
+					{
+						"activity": "LookupConfig",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"dataset": {
+						"referenceName": "ds_blob_folder",
+						"type": "DatasetReference"
+					},
+					"fieldList": [
+						"childItems"
+					],
+					"storeSettings": {
+						"type": "AzureBlobStorageReadSettings",
+						"recursive": true,
+						"enablePartitionDiscovery": false
+					},
+					"formatSettings": {
+						"type": "BinaryReadSettings"
+					}
+				}
+			},
+			{
+				"name": "ForEachFile",
+				"type": "ForEach",
+				"dependsOn": [
+					{
+						"activity": "GetMetadata_Folder",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"items": {
+						"value": "@activity('GetMetadata_Folder').output.childItems",
+						"type": "Expression"
+					},
+					"isSequential": true,
+					"activities": [
+						{
+							"name": "current file type",
+							"type": "SetVariable",
+							"dependsOn": [
+								{
+									"activity": "current full file name",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"policy": {
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"variableName": "currentfiletype",
+								"value": {
+									"value": "@last(split(item().name, '.'))",
+									"type": "Expression"
+								}
+							}
+						},
+						{
+							"name": "Switch",
+							"type": "Switch",
+							"dependsOn": [
+								{
+									"activity": "current file type",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"userProperties": [],
+							"typeProperties": {
+								"on": {
+									"value": "@variables('currentfiletype')",
+									"type": "Expression"
+								},
+								"cases": [
+									{
+										"value": "xlsx",
+										"activities": [
+											{
+												"name": "Copy data excel",
+												"type": "Copy",
+												"dependsOn": [
+													{
+														"activity": "Get Metadata excel",
+														"dependencyConditions": [
+															"Succeeded"
+														]
+													}
+												],
+												"policy": {
+													"timeout": "0.12:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"source": {
+														"type": "ExcelSource",
+														"storeSettings": {
+															"type": "AzureBlobStorageReadSettings",
+															"recursive": true,
+															"enablePartitionDiscovery": false
+														}
+													},
+													"sink": {
+														"type": "ParquetSink",
+														"storeSettings": {
+															"type": "AzureBlobFSWriteSettings"
+														},
+														"formatSettings": {
+															"type": "ParquetWriteSettings"
+														}
+													},
+													"enableStaging": false,
+													"translator": {
+														"type": "TabularTranslator",
+														"typeConversion": true,
+														"typeConversionSettings": {
+															"allowDataTruncation": true,
+															"treatBooleanAsNumber": false
+														}
+													}
+												},
+												"inputs": [
+													{
+														"referenceName": "ds_blob_excel",
+														"type": "DatasetReference",
+														"parameters": {
+															"p_filename": {
+																"value": "@variables('currentfullfilename')",
+																"type": "Expression"
+															}
+														}
+													}
+												],
+												"outputs": [
+													{
+														"referenceName": "ds_adls_excel",
+														"type": "DatasetReference",
+														"parameters": {
+															"p_foldername": "excel",
+															"p_excelname": {
+																"value": "@concat(variables('currentfilename'),'.parquet')",
+																"type": "Expression"
+															}
+														}
+													}
+												]
+											},
+											{
+												"name": "Get Metadata excel",
+												"type": "GetMetadata",
+												"dependsOn": [],
+												"policy": {
+													"timeout": "0.12:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"dataset": {
+														"referenceName": "ds_blob_excel",
+														"type": "DatasetReference",
+														"parameters": {
+															"p_filename": {
+																"value": "@variables('currentfullfilename')",
+																"type": "Expression"
+															}
+														}
+													},
+													"fieldList": [
+														"size"
+													],
+													"storeSettings": {
+														"type": "AzureBlobStorageReadSettings",
+														"recursive": true,
+														"enablePartitionDiscovery": false
+													}
+												}
+											},
+											{
+												"name": "excel sp",
+												"type": "SqlServerStoredProcedure",
+												"dependsOn": [
+													{
+														"activity": "Copy data excel",
+														"dependencyConditions": [
+															"Succeeded"
+														]
+													}
+												],
+												"policy": {
+													"timeout": "0.12:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"storedProcedureName": "[dbo].[usp_LogMigration]",
+													"storedProcedureParameters": {
+														"FileName": {
+															"value": {
+																"value": "@variables('currentfullfilename')",
+																"type": "Expression"
+															},
+															"type": "String"
+														},
+														"FileSizeKb": {
+															"value": {
+																"value": "@activity('Get Metadata excel').output.size",
+																"type": "Expression"
+															},
+															"type": "Decimal"
+														},
+														"FileType": {
+															"value": {
+																"value": "@variables('currentfiletype')",
+																"type": "Expression"
+															},
+															"type": "String"
+														},
+														"PipelineRunId": {
+															"value": null,
+															"type": "String"
+														},
+														"RowCount": {
+															"value": null,
+															"type": "Int32"
+														},
+														"Status": {
+															"value": "Success",
+															"type": "String"
+														}
+													}
+												},
+												"linkedServiceName": {
+													"referenceName": "ls_sqlserver_local",
+													"type": "LinkedServiceReference"
+												}
+											}
+										]
+									},
+									{
+										"value": "json",
+										"activities": [
+											{
+												"name": "Copy data json",
+												"type": "Copy",
+												"dependsOn": [
+													{
+														"activity": "Get Metadata json",
+														"dependencyConditions": [
+															"Succeeded"
+														]
+													}
+												],
+												"policy": {
+													"timeout": "0.12:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"source": {
+														"type": "JsonSource",
+														"storeSettings": {
+															"type": "AzureBlobStorageReadSettings",
+															"recursive": true,
+															"enablePartitionDiscovery": false
+														},
+														"formatSettings": {
+															"type": "JsonReadSettings"
+														}
+													},
+													"sink": {
+														"type": "ParquetSink",
+														"storeSettings": {
+															"type": "AzureBlobFSWriteSettings"
+														},
+														"formatSettings": {
+															"type": "ParquetWriteSettings"
+														}
+													},
+													"enableStaging": false
+												},
+												"inputs": [
+													{
+														"referenceName": "ds_blob_json",
+														"type": "DatasetReference",
+														"parameters": {
+															"p_filename": {
+																"value": "@variables('currentfullfilename')",
+																"type": "Expression"
+															}
+														}
+													}
+												],
+												"outputs": [
+													{
+														"referenceName": "ds_adls_json",
+														"type": "DatasetReference",
+														"parameters": {
+															"p_foldername": "json",
+															"p_jsonname": {
+																"value": "@concat(variables('currentfilename'),'.parquet')",
+																"type": "Expression"
+															}
+														}
+													}
+												]
+											},
+											{
+												"name": "Get Metadata json",
+												"type": "GetMetadata",
+												"dependsOn": [],
+												"policy": {
+													"timeout": "0.12:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"dataset": {
+														"referenceName": "ds_blob_json",
+														"type": "DatasetReference",
+														"parameters": {
+															"p_filename": {
+																"value": "@variables('currentfullfilename')",
+																"type": "Expression"
+															}
+														}
+													},
+													"fieldList": [
+														"size"
+													],
+													"storeSettings": {
+														"type": "AzureBlobStorageReadSettings",
+														"recursive": true,
+														"enablePartitionDiscovery": false
+													},
+													"formatSettings": {
+														"type": "JsonReadSettings"
+													}
+												}
+											},
+											{
+												"name": "json sp",
+												"type": "SqlServerStoredProcedure",
+												"dependsOn": [
+													{
+														"activity": "Copy data json",
+														"dependencyConditions": [
+															"Succeeded"
+														]
+													}
+												],
+												"policy": {
+													"timeout": "0.12:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"storedProcedureName": "[dbo].[usp_LogMigration]",
+													"storedProcedureParameters": {
+														"FileName": {
+															"value": {
+																"value": "@variables('currentfullfilename')",
+																"type": "Expression"
+															},
+															"type": "String"
+														},
+														"FileSizeKb": {
+															"value": {
+																"value": "@activity('Get Metadata json').output.size",
+																"type": "Expression"
+															},
+															"type": "Decimal"
+														},
+														"FileType": {
+															"value": {
+																"value": "@variables('currentfiletype')",
+																"type": "Expression"
+															},
+															"type": "String"
+														},
+														"PipelineRunId": {
+															"value": null,
+															"type": "String"
+														},
+														"RowCount": {
+															"value": null,
+															"type": "Int32"
+														},
+														"Status": {
+															"value": "Success",
+															"type": "String"
+														}
+													}
+												},
+												"linkedServiceName": {
+													"referenceName": "ls_sqlserver_local",
+													"type": "LinkedServiceReference"
+												}
+											}
+										]
+									}
+								],
+								"defaultActivities": [
+									{
+										"name": "Get Metadata other",
+										"type": "GetMetadata",
+										"dependsOn": [],
+										"policy": {
+											"timeout": "0.12:00:00",
+											"retry": 0,
+											"retryIntervalInSeconds": 30,
+											"secureOutput": false,
+											"secureInput": false
+										},
+										"userProperties": [],
+										"typeProperties": {
+											"dataset": {
+												"referenceName": "ds_blob_other",
+												"type": "DatasetReference",
+												"parameters": {
+													"p_filename": {
+														"value": "@variables('currentfullfilename')",
+														"type": "Expression"
+													}
+												}
+											},
+											"fieldList": [
+												"size"
+											],
+											"storeSettings": {
+												"type": "AzureBlobStorageReadSettings",
+												"recursive": true,
+												"enablePartitionDiscovery": false
+											},
+											"formatSettings": {
+												"type": "BinaryReadSettings"
+											}
+										}
+									},
+									{
+										"name": "sp for updating other",
+										"type": "SqlServerStoredProcedure",
+										"dependsOn": [
+											{
+												"activity": "Get Metadata other",
+												"dependencyConditions": [
+													"Succeeded"
+												]
+											}
+										],
+										"policy": {
+											"timeout": "0.12:00:00",
+											"retry": 0,
+											"retryIntervalInSeconds": 30,
+											"secureOutput": false,
+											"secureInput": false
+										},
+										"userProperties": [],
+										"typeProperties": {
+											"storedProcedureName": "[dbo].[usp_LogMigration]",
+											"storedProcedureParameters": {
+												"FileName": {
+													"value": {
+														"value": "@variables('currentfullfilename')",
+														"type": "Expression"
+													},
+													"type": "String"
+												},
+												"FileSizeKb": {
+													"value": {
+														"value": "@activity('Get Metadata other').output.size",
+														"type": "Expression"
+													},
+													"type": "Decimal"
+												},
+												"FileType": {
+													"value": {
+														"value": "@variables('currentfiletype')",
+														"type": "Expression"
+													},
+													"type": "String"
+												},
+												"PipelineRunId": {
+													"value": null,
+													"type": "String"
+												},
+												"RowCount": {
+													"value": null,
+													"type": "Int32"
+												},
+												"Status": {
+													"value": "Ignored",
+													"type": "String"
+												}
+											}
+										},
+										"linkedServiceName": {
+											"referenceName": "ls_sqlserver_local",
+											"type": "LinkedServiceReference"
+										}
+									}
+								]
+							}
+						},
+						{
+							"name": "current full file name",
+							"description": "",
+							"type": "SetVariable",
+							"dependsOn": [
+								{
+									"activity": "current file name  without filetype",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"policy": {
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"variableName": "currentfullfilename",
+								"value": {
+									"value": "@item().name",
+									"type": "Expression"
+								}
+							}
+						},
+						{
+							"name": "current file name  without filetype",
+							"description": "plain file name without filetype",
+							"type": "SetVariable",
+							"dependsOn": [],
+							"policy": {
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"variableName": "currentfilename",
+								"value": {
+									"value": "@first(split(item().name, '.'))",
+									"type": "Expression"
+								}
+							}
+						}
+					]
+				}
+			}
+		],
+		"parameters": {
+			"var_status": {
+				"type": "string",
+				"defaultValue": "Failed"
+			},
+			"var_row_count": {
+				"type": "int",
+				"defaultValue": 0
+			},
+			"var_file_size_kb": {
+				"type": "float",
+				"defaultValue": 0
+			}
+		},
+		"variables": {
+			"currentfilename": {
+				"type": "String"
+			},
+			"filterresult": {
+				"type": "Boolean"
+			},
+			"filterresultarry": {
+				"type": "Array"
+			},
+			"filterbool": {
+				"type": "Boolean"
+			},
+			"currentfiletype": {
+				"type": "String"
+			},
+			"currentfullfilename": {
+				"type": "String"
+			}
+		},
+		"annotations": [],
+		"lastPublishTime": "2026-03-18T06:12:15Z"
+	},
+	"type": "Microsoft.DataFactory/factories/pipelines"
+}

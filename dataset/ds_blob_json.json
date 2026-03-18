@@ -1,0 +1,29 @@
+{
+	"name": "ds_blob_json",
+	"properties": {
+		"linkedServiceName": {
+			"referenceName": "ls_blob_raw",
+			"type": "LinkedServiceReference"
+		},
+		"parameters": {
+			"p_filename": {
+				"type": "String",
+				"defaultValue": "DefaultJsonName"
+			}
+		},
+		"annotations": [],
+		"type": "Json",
+		"typeProperties": {
+			"location": {
+				"type": "AzureBlobStorageLocation",
+				"fileName": {
+					"value": "@dataset().p_filename",
+					"type": "Expression"
+				},
+				"container": "raw"
+			}
+		},
+		"schema": {}
+	},
+	"type": "Microsoft.DataFactory/factories/datasets"
+}

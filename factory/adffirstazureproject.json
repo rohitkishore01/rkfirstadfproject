@@ -1,0 +1,9 @@
+{
+	"name": "adffirstazureproject",
+	"location": "southindia",
+	"identity": {
+		"type": "SystemAssigned",
+		"principalId": "ca8b1fa9-f6e2-4c7b-a9cf-09cbc8e1e38b",
+		"tenantId": "7d7c0bf9-fbc9-42ce-b203-340010076db2"
+	}
+}

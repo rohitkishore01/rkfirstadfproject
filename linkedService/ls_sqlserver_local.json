@@ -1,0 +1,21 @@
+{
+	"name": "ls_sqlserver_local",
+	"type": "Microsoft.DataFactory/factories/linkedservices",
+	"properties": {
+		"annotations": [],
+		"type": "SqlServer",
+		"typeProperties": {
+			"server": "DESKTOP-1J15KOS",
+			"database": "ADF_Log",
+			"encrypt": "optional",
+			"trustServerCertificate": true,
+			"authenticationType": "SQL",
+			"userName": "localdbuser",
+			"encryptedCredential": "eyJDcmVkZW50aWFsSWQiOiI0N2I4ODJmOS0zNjllLTRhOWQtYWFkZC01ZmI3OTBiZDIxNzQiLCJWZXJzaW9uIjoiMi4wIiwiQ2xhc3NUeXBlIjoiTWljcm9zb2Z0LkRhdGFQcm94eS5Db3JlLkludGVyU2VydmljZURhdGFDb250cmFjdC5DcmVkZW50aWFsU1UwNkNZMTQifQ=="
+		},
+		"connectVia": {
+			"referenceName": "LocalIntegration",
+			"type": "IntegrationRuntimeReference"
+		}
+	}
+}

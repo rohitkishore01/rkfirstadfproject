@@ -6,10 +6,10 @@
 			"type": "LinkedServiceReference"
 		},
 		"parameters": {
-			"Tablename": {
+			"TableName": {
 				"type": "string"
 			},
-			"Schemaname": {
+			"TableSchema": {
 				"type": "string"
 			}
 		},
@@ -57,11 +57,11 @@
 		],
 		"typeProperties": {
 			"schema": {
-				"value": "@dataset().Schemaname",
+				"value": "@dataset().TableSchema",
 				"type": "Expression"
 			},
 			"table": {
-				"value": "@dataset().Tablename",
+				"value": "@dataset().TableName",
 				"type": "Expression"
 			}
 		}

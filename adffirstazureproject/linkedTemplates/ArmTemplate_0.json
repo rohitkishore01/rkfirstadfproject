@@ -15,11 +15,23 @@
 			"type": "secureString",
 			"metadata": "Secure string for 'connectionString' of 'ls_blob_raw'"
 		},
+		"AzureDataLakeStorageGG_accountKey": {
+			"type": "secureString",
+			"metadata": "Secure string for 'accountKey' of 'AzureDataLakeStorageGG'"
+		},
 		"ls_sqlserver_local_password": {
 			"type": "secureString",
 			"metadata": "Secure string for 'password' of 'ls_sqlserver_local'"
 		},
+		"ls_sqlserver_migrationproject_password": {
+			"type": "secureString",
+			"metadata": "Secure string for 'password' of 'ls_sqlserver_migrationproject'"
+		},
 		"ls_adls_bronze_properties_typeProperties_url": {
+			"type": "string",
+			"defaultValue": "https://adlsgfirstazureproject.dfs.core.windows.net/"
+		},
+		"AzureDataLakeStorageGG_properties_typeProperties_url": {
 			"type": "string",
 			"defaultValue": "https://adlsgfirstazureproject.dfs.core.windows.net/"
 		},
@@ -32,6 +44,18 @@
 			"defaultValue": "ADF_Log"
 		},
 		"ls_sqlserver_local_properties_typeProperties_userName": {
+			"type": "string",
+			"defaultValue": "localdbuser"
+		},
+		"ls_sqlserver_migrationproject_properties_typeProperties_server": {
+			"type": "string",
+			"defaultValue": "DESKTOP-1J15KOS"
+		},
+		"ls_sqlserver_migrationproject_properties_typeProperties_database": {
+			"type": "string",
+			"defaultValue": "MigrationProject"
+		},
+		"ls_sqlserver_migrationproject_properties_typeProperties_userName": {
 			"type": "string",
 			"defaultValue": "localdbuser"
 		}
@@ -77,6 +101,23 @@
 			"properties": {
 				"type": "SelfHosted",
 				"typeProperties": {}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/AzureDataLakeStorageGG')]",
+			"type": "Microsoft.DataFactory/factories/linkedServices",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"annotations": [],
+				"type": "AzureBlobFS",
+				"typeProperties": {
+					"url": "[parameters('AzureDataLakeStorageGG_properties_typeProperties_url')]",
+					"accountKey": {
+						"type": "SecureString",
+						"value": "[parameters('AzureDataLakeStorageGG_accountKey')]"
+					}
+				}
 			},
 			"dependsOn": []
 		},
@@ -315,6 +356,93 @@
 			]
 		},
 		{
+			"name": "[concat(parameters('factoryName'), '/ds_adls_mig_parquet')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "ls_adls_bronze",
+					"type": "LinkedServiceReference"
+				},
+				"parameters": {
+					"TableName": {
+						"type": "string"
+					}
+				},
+				"annotations": [],
+				"type": "Parquet",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"fileName": "@concat(dataset().TableName,'_',formatDateTime(utcNow(),'yyyyMMddHHmmss'),'.parquet')",
+						"folderPath": {
+							"value": "@concat(dataset().TableName,'/',formatDateTime(utcNow(),'yyyy/MM/dd'))\n",
+							"type": "Expression"
+						},
+						"fileSystem": "migrationoutput"
+					},
+					"compressionCodec": "snappy"
+				},
+				"schema": [
+					{
+						"name": "ID",
+						"type": "UTF8"
+					},
+					{
+						"name": "FirstName",
+						"type": "UTF8"
+					},
+					{
+						"name": "LastName",
+						"type": "UTF8"
+					},
+					{
+						"name": "Gender",
+						"type": "UTF8"
+					},
+					{
+						"name": "Country",
+						"type": "UTF8"
+					},
+					{
+						"name": "Age",
+						"type": "UTF8"
+					}
+				]
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/ls_adls_bronze')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/ls_sqlserver_migrationproject')]",
+			"type": "Microsoft.DataFactory/factories/linkedServices",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"annotations": [],
+				"type": "SqlServer",
+				"typeProperties": {
+					"server": "[parameters('ls_sqlserver_migrationproject_properties_typeProperties_server')]",
+					"database": "[parameters('ls_sqlserver_migrationproject_properties_typeProperties_database')]",
+					"encrypt": "optional",
+					"trustServerCertificate": true,
+					"authenticationType": "SQL",
+					"userName": "[parameters('ls_sqlserver_migrationproject_properties_typeProperties_userName')]",
+					"password": {
+						"type": "SecureString",
+						"value": "[parameters('ls_sqlserver_migrationproject_password')]"
+					}
+				},
+				"connectVia": {
+					"referenceName": "LocalIntegration",
+					"type": "IntegrationRuntimeReference"
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/integrationRuntimes/LocalIntegration')]"
+			]
+		},
+		{
 			"name": "[concat(parameters('factoryName'), '/ds_sqlserver_config')]",
 			"type": "Microsoft.DataFactory/factories/datasets",
 			"apiVersion": "2018-06-01",
@@ -372,6 +500,80 @@
 			},
 			"dependsOn": [
 				"[concat(variables('factoryId'), '/linkedServices/ls_sqlserver_local')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/ds_sqlserver_migrationproject')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "ls_sqlserver_migrationproject",
+					"type": "LinkedServiceReference"
+				},
+				"parameters": {
+					"TableName": {
+						"type": "string"
+					},
+					"TableSchema": {
+						"type": "string"
+					}
+				},
+				"annotations": [],
+				"type": "SqlServerTable",
+				"schema": [
+					{
+						"name": "log_id",
+						"type": "int",
+						"precision": 10
+					},
+					{
+						"name": "file_name",
+						"type": "varchar"
+					},
+					{
+						"name": "file_type",
+						"type": "varchar"
+					},
+					{
+						"name": "file_size_kb",
+						"type": "decimal",
+						"precision": 10,
+						"scale": 2
+					},
+					{
+						"name": "row_count",
+						"type": "int",
+						"precision": 10
+					},
+					{
+						"name": "status",
+						"type": "varchar"
+					},
+					{
+						"name": "transferred_at",
+						"type": "datetime",
+						"precision": 23,
+						"scale": 3
+					},
+					{
+						"name": "pipeline_run_id",
+						"type": "varchar"
+					}
+				],
+				"typeProperties": {
+					"schema": {
+						"value": "@dataset().TableSchema",
+						"type": "Expression"
+					},
+					"table": {
+						"value": "@dataset().TableName",
+						"type": "Expression"
+					}
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/ls_sqlserver_migrationproject')]"
 			]
 		},
 		{
@@ -1050,6 +1252,283 @@
 				"[concat(variables('factoryId'), '/datasets/ds_adls_excel')]",
 				"[concat(variables('factoryId'), '/datasets/ds_blob_json')]",
 				"[concat(variables('factoryId'), '/datasets/ds_adls_json')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/MasterPipeline_Migrationproject')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "Lookup_watermarktable",
+						"type": "Lookup",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "SqlServerSource",
+								"sqlReaderQuery": {
+									"value": "SELECT * FROM dbo.ADF_Watermark_Table;",
+									"type": "Expression"
+								},
+								"queryTimeout": "02:00:00",
+								"partitionOption": "None"
+							},
+							"dataset": {
+								"referenceName": "ds_sqlserver_migrationproject",
+								"type": "DatasetReference",
+								"parameters": {
+									"TableName": "dbo",
+									"TableSchema": "ADF_Watermark_Table"
+								}
+							},
+							"firstRowOnly": false
+						}
+					},
+					{
+						"name": "ForEach_Master",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "Lookup_watermarktable",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('Lookup_watermarktable').output.value",
+								"type": "Expression"
+							},
+							"isSequential": false,
+							"activities": [
+								{
+									"name": "Lookup_watermark_max",
+									"type": "Lookup",
+									"dependsOn": [],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "SqlServerSource",
+											"sqlReaderQuery": {
+												"value": "@concat('SELECT MAX([', item().WatermarkColumn, ']) AS MaxValue FROM [', item().TableSchema, '].[', item().TableName, ']')",
+												"type": "Expression"
+											},
+											"queryTimeout": "02:00:00",
+											"partitionOption": "None"
+										},
+										"dataset": {
+											"referenceName": "ds_sqlserver_migrationproject",
+											"type": "DatasetReference",
+											"parameters": {
+												"TableName": {
+													"value": "@item().TableName",
+													"type": "Expression"
+												},
+												"TableSchema": {
+													"value": "@item().TableSchema",
+													"type": "Expression"
+												}
+											}
+										}
+									}
+								},
+								{
+									"name": "If Condition_incremental",
+									"type": "IfCondition",
+									"dependsOn": [
+										{
+											"activity": "Lookup_watermark_max",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"userProperties": [],
+									"typeProperties": {
+										"expression": {
+											"value": "@or(equals(item().LastLoadValue, null), greater(int(activity('Lookup_watermark_max').output.firstRow.MaxValue), int(item().LastLoadValue)))",
+											"type": "Expression"
+										},
+										"ifTrueActivities": [
+											{
+												"name": "Copy data",
+												"type": "Copy",
+												"dependsOn": [],
+												"policy": {
+													"timeout": "0.12:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"source": {
+														"type": "SqlServerSource",
+														"sqlReaderQuery": {
+															"value": "@concat(\n    'SELECT * FROM [',\n    item().TableSchema,\n    '].[', \n    item().TableName,\n    ']',\n    if(\n        equals(item().LastLoadValue, null),\n        '',\n        concat(\n            ' WHERE [',\n            item().WatermarkColumn,\n            '] > ''',\n           item().LastLoadValue,\n            ''''\n        )\n    )\n)",
+															"type": "Expression"
+														},
+														"queryTimeout": "02:00:00",
+														"partitionOption": "None"
+													},
+													"sink": {
+														"type": "ParquetSink",
+														"storeSettings": {
+															"type": "AzureBlobFSWriteSettings"
+														},
+														"formatSettings": {
+															"type": "ParquetWriteSettings"
+														}
+													},
+													"enableStaging": false,
+													"translator": {
+														"type": "TabularTranslator",
+														"typeConversion": true,
+														"typeConversionSettings": {
+															"allowDataTruncation": true,
+															"treatBooleanAsNumber": false
+														}
+													}
+												},
+												"inputs": [
+													{
+														"referenceName": "ds_sqlserver_migrationproject",
+														"type": "DatasetReference",
+														"parameters": {
+															"TableName": {
+																"value": "@item().TableName",
+																"type": "Expression"
+															},
+															"TableSchema": {
+																"value": "@item().TableSchema",
+																"type": "Expression"
+															}
+														}
+													}
+												],
+												"outputs": [
+													{
+														"referenceName": "ds_adls_mig_parquet",
+														"type": "DatasetReference",
+														"parameters": {
+															"TableName": {
+																"value": "@item().TableName",
+																"type": "Expression"
+															}
+														}
+													}
+												]
+											},
+											{
+												"name": "Stored procedure_Watermarkcolumn",
+												"type": "SqlServerStoredProcedure",
+												"dependsOn": [
+													{
+														"activity": "Copy data",
+														"dependencyConditions": [
+															"Succeeded"
+														]
+													}
+												],
+												"policy": {
+													"timeout": "0.12:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"storedProcedureName": "[[dbo].[UpdateWatermark]",
+													"storedProcedureParameters": {
+														"LatestWatermarkValue": {
+															"value": {
+																"value": "@activity('Lookup_watermark_max').output.firstRow.Maxvalue",
+																"type": "Expression"
+															},
+															"type": "Int32"
+														},
+														"TableName": {
+															"value": {
+																"value": "item().TableName",
+																"type": "Expression"
+															},
+															"type": "String"
+														},
+														"TableSchema": {
+															"value": {
+																"value": "item().TableSchema",
+																"type": "Expression"
+															},
+															"type": "String"
+														},
+														"WatermarkColumn": {
+															"value": {
+																"value": "item().WatermarkColumn",
+																"type": "Expression"
+															},
+															"type": "String"
+														}
+													}
+												},
+												"linkedServiceName": {
+													"referenceName": "ls_sqlserver_migrationproject",
+													"type": "LinkedServiceReference"
+												}
+											}
+										]
+									}
+								}
+							]
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"variables": {
+					"tbl_name": {
+						"type": "String"
+					},
+					"schema_name": {
+						"type": "String"
+					},
+					"Watercolum_name": {
+						"type": "String"
+					},
+					"max_value": {
+						"type": "Integer"
+					},
+					"lastloaded": {
+						"type": "Integer"
+					}
+				},
+				"annotations": [],
+				"lastPublishTime": "2026-03-25T17:13:39Z"
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/datasets/ds_sqlserver_migrationproject')]",
+				"[concat(variables('factoryId'), '/datasets/ds_adls_mig_parquet')]",
+				"[concat(variables('factoryId'), '/linkedServices/ls_sqlserver_migrationproject')]"
 			]
 		}
 	]

@@ -14,6 +14,12 @@
 		"ls_sqlserver_local_password": {
 			"value": ""
 		},
+		"AzureDataLakeStorageGG_accountKey": {
+			"value": ""
+		},
+		"ls_sqlserver_migrationproject_password": {
+			"value": ""
+		},
 		"ls_adls_bronze_properties_typeProperties_url": {
 			"value": "https://adlsgfirstazureproject.dfs.core.windows.net/"
 		},
@@ -24,6 +30,18 @@
 			"value": "ADF_Log"
 		},
 		"ls_sqlserver_local_properties_typeProperties_userName": {
+			"value": "localdbuser"
+		},
+		"AzureDataLakeStorageGG_properties_typeProperties_url": {
+			"value": "https://adlsgfirstazureproject.dfs.core.windows.net/"
+		},
+		"ls_sqlserver_migrationproject_properties_typeProperties_server": {
+			"value": "DESKTOP-1J15KOS"
+		},
+		"ls_sqlserver_migrationproject_properties_typeProperties_database": {
+			"value": "MigrationProject"
+		},
+		"ls_sqlserver_migrationproject_properties_typeProperties_userName": {
 			"value": "localdbuser"
 		},
 		"containerUri": {

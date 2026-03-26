@@ -28,8 +28,8 @@
 						"referenceName": "ds_sqlserver_migrationproject",
 						"type": "DatasetReference",
 						"parameters": {
-							"Tablename": "dbo",
-							"Schemaname": "ADF_Watermark_Table"
+							"TableName": "dbo",
+							"TableSchema": "ADF_Watermark_Table"
 						}
 					},
 					"firstRowOnly": false
@@ -80,11 +80,11 @@
 									"referenceName": "ds_sqlserver_migrationproject",
 									"type": "DatasetReference",
 									"parameters": {
-										"Tablename": {
+										"TableName": {
 											"value": "@item().TableName",
 											"type": "Expression"
 										},
-										"Schemaname": {
+										"TableSchema": {
 											"value": "@item().TableSchema",
 											"type": "Expression"
 										}
@@ -156,12 +156,12 @@
 												"referenceName": "ds_sqlserver_migrationproject",
 												"type": "DatasetReference",
 												"parameters": {
-													"Tablename": {
-														"value": "item().TableName",
+													"TableName": {
+														"value": "@item().TableName",
 														"type": "Expression"
 													},
-													"Schemaname": {
-														"value": "item().TableSchema",
+													"TableSchema": {
+														"value": "@item().TableSchema",
 														"type": "Expression"
 													}
 												}
@@ -173,7 +173,7 @@
 												"type": "DatasetReference",
 												"parameters": {
 													"TableName": {
-														"value": "item().TableName",
+														"value": "@item().TableName",
 														"type": "Expression"
 													}
 												}
